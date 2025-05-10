@@ -54,17 +54,17 @@ class Direction(Enum):
     def to_delta(self) -> Tuple[int, int]:
         return _DIRECTION_TO_DELTA[self.name]
 
-    def rotate(self, step: int = 1) -> Direction:
+    def rotate(self, step: int = 1) -> "Direction":
         order = _DIRECTION_ROTATE_ORDER
         idx = order.index(self.name)
         new_idx = (idx + step) % 8
         return Direction[_DIRECTION_ROTATE_ORDER[new_idx]]
 
-    def opposite(self) -> Direction:
+    def opposite(self) -> "Direction":
         return Direction[_DIRECTION_OPPOSITE[self.name]]
 
     @staticmethod
-    def diagonals() -> set[Direction]:
+    def diagonals() -> set["Direction"]:
         return {Direction[name] for name in _DIRECTION_DIAGONALS}
 
 

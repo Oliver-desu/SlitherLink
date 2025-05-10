@@ -121,7 +121,7 @@ class Sudoku:
         """
         row_scale, col_scale = scale
         entry_num = self.entry.get(pos, -1)
-        if entry_num > 0:
+        if entry_num >= 0:
             if loc == col_scale:
                 # 中间行显示格子数字
                 return row_scale * ' ' + f"{entry_num}" + row_scale * ' '
@@ -258,7 +258,49 @@ class Sudoku:
             for edge_pos in dct[EdgeType.SPACE]:
                 self.set_edge(edge_pos, EdgeType.THICK)
 
+    def propagate_diagonal(self, pos: Position, direction: Direction) -> None:
+        """
+        沿指定对角方向，递归推导并更新 edge count。
+        - 读取当前格子反方向的 edge count（作为初值）。
+        - 根据当前 entry 数字，推算出本方向的 edge count。
+        - 更新本方向的 edge count，并将变化传递到对角方向的下一个格子。
+        - 如果推导成功，继续递归传播。
+        """
+        # 根据 entry 数字推导前方向的 edge count
+        entry_num = self.entry.get(pos, -1)
+        if entry_num not in (1, 2, 3):
+            return
+
+        # 获取当前位置反方向的 edge count
+        ec0 = self.edge_count.get((pos, direction.opposite()))
+        ec1 = ec0.subtract_by(entry_num)
+
+        if self.set_edge_count(pos, direction, ec1):
+            # 如果成功修改，递归推导下一个位置
+            next_pos = pos.move(direction, 2)
+            ec2 = ec1.flip()
+            if self.set_edge_count(next_pos, direction.opposite(), ec2):
+                self.propagate_diagonal(next_pos, direction)
+
+    def solve(self):
+        """
+        将初始推导任务加入指令栈，并执行所有推导。
+        """
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                pos = Position(2 * i + 1, 2 * j + 1)
+                entry_num = self.entry.get(pos, -1)
+
+                if entry_num in (1, 3):
+                    for direction in Direction.diagonals():
+                        self.add_command(self.propagate_diagonal, pos, direction)
+                elif entry_num == 0:
+                    self.add_command(self.deduce_from_entry, pos)
+
+        self.run_all_commands()
+
 
 if __name__ == "__main__":
     sudoku = Sudoku.from_file("example_puzzle.txt")
-    sudoku.display()
+    sudoku.solve()
+    sudoku.display((4, 1))
