@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple
+from typing import Tuple, Optional
 
 # --- 外部静态表 ---
 _DIRECTION_TO_DELTA = {
@@ -86,6 +86,16 @@ class Kind(Enum):
 class Position:
     x: int
     y: int
+
+    def midpoint(self, other: "Position") -> Optional["Position"]:
+        """
+        如果 self 和 other 之间是正交方向上隔一个格子的关系，
+        返回它们之间的中点位置；否则返回 None。
+        """
+        for direction in Direction.orthogonals():
+            if self.move(direction, 2) == other:
+                return self.move(direction, 1)
+        return None
 
     def neighbors(self) -> list["Position"]:
         """

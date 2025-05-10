@@ -23,6 +23,7 @@ class Sudoku:
     - edge_count: Dict[Tuple[Position, Direction], EdgeCount]
         记录每个格子的四个角的边界条件，
         key 是 (格子中心位置, 角的方向)，value 是 EdgeCount，表示该角可能有多少条实线边。
+    - connected: List[set[Position]] 记录相连接的格子集合。
     - command_stack: List[Command]
         维护一系列等待执行的推导命令，支持批量逻辑推导。
 
@@ -32,6 +33,10 @@ class Sudoku:
     - deduce_from_corner(pos, direction): 基于角的边信息进行推导。
     - deduce_from_vertex(pos): 基于顶点的边信息进行推导。
     - deduce_from_entry(pos): 基于格子内部数字进行推导。
+    - propagate_diagonal(pos, direction): 沿对角线方向递归推导 edge count。
+    - deduce_from_3(pos): 针对相邻 3 的特殊推导。
+    - deduce_from_connected(set1): 处理通过连接关系推导出新的 CROSS 边以避免 Loop。
+    - solve(): 扫描初始盘面，根据 0、3 的 Entry 信息建立初步推导指令并执行。
     - add_command(func, *args): 将推导命令加入栈中。
     - run_next_command(): 执行栈顶命令。
     - run_all_commands(): 执行所有命令直到栈空。
@@ -49,6 +54,7 @@ class Sudoku:
         self.entry: Dict[Position, int] = {}
         self.edge: Dict[Position, EdgeType] = {}
         self.edge_count: Dict[Tuple[Position, Direction], EdgeCount] = {}
+        self.connected: List[set[Position]] = []
         self.command_stack: List[Command] = []
 
         # 读取数独格子
@@ -145,11 +151,13 @@ class Sudoku:
         """
         if self.edge.get(pos, -1) == EdgeType.SPACE and edge_type != EdgeType.SPACE:
             self.edge[pos] = edge_type
+            neighbor_vertex = set()
 
             # 添加命令到堆栈：逐方向处理邻居
             for direction in Direction.orthogonals():
                 neighbour_pos = pos.move(direction)
                 if neighbour_pos.kind() == Kind.VERTEX:
+                    neighbor_vertex.add(neighbour_pos)
                     self.add_command(self.deduce_from_vertex, neighbour_pos)
                 elif neighbour_pos.kind() == Kind.ENTRY:
                     self.add_command(self.deduce_from_entry, neighbour_pos)
@@ -158,6 +166,8 @@ class Sudoku:
                     # 对角线推导
                     self.add_command(self.deduce_from_corner, neighbour_pos, prev_direction)
                     self.add_command(self.deduce_from_corner, neighbour_pos, next_direction)
+            if edge_type == EdgeType.THICK:
+                self.deduce_from_connected(neighbor_vertex)
             return True
         return False
 
@@ -172,7 +182,8 @@ class Sudoku:
         if curr_ec:
             new_ec = curr_ec.intersect(ec)
             if not new_ec:
-                raise ValueError("Sudoku reached a contradiction!")
+                self.display()
+                raise ValueError(f"Sudoku reached a contradiction at entry {pos}!")
             if curr_ec != new_ec:
                 self.edge_count[(pos, direction)] = new_ec
                 self.add_command(self.propagate_diagonal, pos, direction.opposite())
@@ -293,6 +304,40 @@ class Sudoku:
         ec2 = ec1.flip()
         self.set_edge_count(next_pos, direction.opposite(), ec2)
 
+    def deduce_from_3(self, pos: Position) -> None:
+        """
+        根据当前位置的 3，与其下方或右方的 3 配合推导边界信息。
+        """
+        for direction in (Direction.DOWN, Direction.RIGHT):
+            neighbor_pos = pos.move(direction, 2)
+            if self.entry.get(neighbor_pos) == 3:
+                middle_pos = pos.move(direction, 1)
+                orthogonal_direction = direction.rotate(2)
+
+                self.set_edge(middle_pos, EdgeType.THICK)
+                self.set_edge(middle_pos.move(direction, 2), EdgeType.THICK)
+                self.set_edge(middle_pos.move(direction, -2), EdgeType.THICK)
+                self.set_edge(middle_pos.move(orthogonal_direction, 2), EdgeType.CROSS)
+                self.set_edge(middle_pos.move(orthogonal_direction, -2), EdgeType.CROSS)
+
+    def deduce_from_connected(self, set1: set[Position]) -> None:
+        """
+        根据新的连通块 set1，尝试合并已有连通块，并根据连通关系推导边界信息。
+        """
+        for set2 in self.connected:
+            common = set1 & set2
+            if len(common) == 1:
+                self.connected.remove(set2)
+                merged_set = (set1 | set2) - common
+                return self.deduce_from_connected(merged_set)
+
+        self.connected.append(set1)
+
+        pos1, pos2 = tuple(set1)
+        edge_pos = pos1.midpoint(pos2)
+        if edge_pos is not None and self.edge.get(edge_pos) == EdgeType.SPACE:
+            self.set_edge(edge_pos, EdgeType.CROSS)
+
     def solve(self):
         """
         将初始推导任务加入指令栈，并执行所有推导。
@@ -302,7 +347,8 @@ class Sudoku:
                 pos = Position(2 * i + 1, 2 * j + 1)
                 entry_num = self.entry.get(pos, -1)
 
-                if entry_num in (1, 3):
+                if entry_num == 3:
+                    self.deduce_from_3(pos)
                     for direction in Direction.diagonals():
                         self.add_command(self.propagate_diagonal, pos, direction)
                 elif entry_num == 0:
