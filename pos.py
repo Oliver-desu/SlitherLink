@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Tuple, Optional
+from typing import Tuple
 
 # --- 外部静态表 ---
 _DIRECTION_TO_DELTA = {
@@ -87,15 +87,28 @@ class Position:
     x: int
     y: int
 
-    def midpoint(self, other: "Position") -> Optional["Position"]:
+    def common_neighbors(self, other: "Position") -> set["Position"]:
         """
-        如果 self 和 other 之间是正交方向上隔一个格子的关系，
-        返回它们之间的中点位置；否则返回 None。
+        返回 self 和 other 共同相邻的所有位置集合。
+        - 如果两者在正交方向隔一个格子（上下左右），返回中间位置。
+        - 如果两者在对角方向相邻（斜着相邻），返回共享的两侧正交邻居。
         """
+        result = set()
+
+        # 检查正交方向（上下左右）
         for direction in Direction.orthogonals():
             if self.move(direction, 2) == other:
-                return self.move(direction, 1)
-        return None
+                result.add(self.move(direction, 1))
+                return result  # 正交方向只会有一个中点，直接返回
+
+        # 检查对角方向（斜着）
+        for direction in Direction.diagonals():
+            if self.move(direction) == other:
+                result.add(self.move(direction.rotate(1)))
+                result.add(self.move(direction.rotate(-1)))
+                return result
+
+        return result  # 默认返回空集合
 
     def neighbors(self) -> list["Position"]:
         """

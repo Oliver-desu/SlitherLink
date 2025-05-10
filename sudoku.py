@@ -33,7 +33,7 @@ class Sudoku:
     - deduce_from_corner(pos, direction): 基于角的边信息进行推导。
     - deduce_from_vertex(pos): 基于顶点的边信息进行推导。
     - deduce_from_entry(pos): 基于格子内部数字进行推导。
-    - propagate_diagonal(pos, direction): 沿对角线方向递归推导 edge count。
+    - (弃用) propagate_diagonal(pos, direction): 沿对角线方向递归推导 edge count（已整合进 deduce_from_corner）。
     - deduce_from_3(pos): 针对相邻 3 的特殊推导。
     - deduce_from_connected(set1): 处理通过连接关系推导出新的 CROSS 边以避免 Loop。
     - solve(): 扫描初始盘面，根据 0、3 的 Entry 信息建立初步推导指令并执行。
@@ -215,28 +215,40 @@ class Sudoku:
 
     def deduce_from_corner(self, pos: Position, direction: Direction) -> None:
         """
-        根据一个 corner 点和方向，结合已有边的信息，推导 edge 和 edge_count 的新状态。
+        根据 corner 点和方向，结合已有边和 edge count 的信息，推导新的棋盘状态。
+        包括：
+        - 更新两侧边（左、右）的状态
+        - 更新前后方向上的 edge count
         """
-        # 获取当前 corner 的 edge count 信息
-        ec = self.edge_count.get((pos, direction))
-        if not ec:
-            return
+        # 获取当前 corner 的 edge count
+        ec = self.edge_count.get((pos, direction), EdgeCount.ANY)
 
-        # 获取当前方向左右两条边
-        pos1 = pos.move(direction.rotate(step=-1))  # 左边
-        pos2 = pos.move(direction.rotate(step=1))  # 右边
-        edge1 = self.edge.get(pos1)
-        edge2 = self.edge.get(pos2)
+        # 获取左右两条边的位置与当前状态
+        pos1 = pos.move(direction.rotate(-1))  # 左侧边
+        pos2 = pos.move(direction.rotate(1))  # 右侧边
+        edge1 = self.edge.get(pos1, EdgeType.CROSS)
+        edge2 = self.edge.get(pos2, EdgeType.CROSS)
 
-        # 计算推导结果
+        # 根据现有边推导新的 edge count 和边的状态
         new_ec = edge1.add(edge2)
         new_edge1 = ec.subtract(edge2)
         new_edge2 = ec.subtract(edge1)
 
-        # 应用推导结果，更新棋盘状态
+        # 应用推导结果
         self.set_edge_count(pos, direction, new_ec)
         self.set_edge(pos1, new_edge1)
         self.set_edge(pos2, new_edge2)
+
+        # 根据 entry 的数字，进一步推导反方向的 edge count
+        entry_num = self.entry.get(pos, -1)
+        if entry_num in (1, 2, 3):
+            ec_back = new_ec.subtract_by(entry_num)
+            self.set_edge_count(pos, direction.opposite(), ec_back)
+
+        # 继续沿指定方向传播推导
+        next_pos = pos.move(direction, 2)
+        ec_next = new_ec.flip()
+        self.set_edge_count(next_pos, direction.opposite(), ec_next)
 
     def deduce_from_vertex(self, pos: Position) -> None:
         """
@@ -334,9 +346,9 @@ class Sudoku:
         self.connected.append(set1)
 
         pos1, pos2 = tuple(set1)
-        edge_pos = pos1.midpoint(pos2)
-        if edge_pos is not None and self.edge.get(edge_pos) == EdgeType.SPACE:
-            self.set_edge(edge_pos, EdgeType.CROSS)
+        for edge_pos in pos1.common_neighbors(pos2):
+            if self.edge.get(edge_pos) == EdgeType.SPACE:
+                self.set_edge(edge_pos, EdgeType.CROSS)
 
     def solve(self):
         """
@@ -350,7 +362,7 @@ class Sudoku:
                 if entry_num == 3:
                     self.deduce_from_3(pos)
                     for direction in Direction.diagonals():
-                        self.add_command(self.propagate_diagonal, pos, direction)
+                        self.add_command(self.deduce_from_corner, pos, direction)
                 elif entry_num == 0:
                     self.add_command(self.deduce_from_entry, pos)
 
