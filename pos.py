@@ -40,6 +40,10 @@ _DIRECTION_DIAGONALS = {
     'UP_LEFT', 'UP_RIGHT', 'DOWN_LEFT', 'DOWN_RIGHT'
 }
 
+_DIRECTION_ORTHOGONALS = {
+    "UP", "DOWN", "LEFT", "RIGHT"
+}
+
 
 class Direction(Enum):
     UP = auto()
@@ -66,6 +70,10 @@ class Direction(Enum):
     @staticmethod
     def diagonals() -> set["Direction"]:
         return {Direction[name] for name in _DIRECTION_DIAGONALS}
+
+    @staticmethod
+    def orthogonals() -> set["Direction"]:
+        return {Direction[name] for name in _DIRECTION_ORTHOGONALS}
 
 
 class Kind(Enum):

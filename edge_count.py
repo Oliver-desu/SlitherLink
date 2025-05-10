@@ -144,18 +144,20 @@ class EdgeCount(Enum):
     LARGE = auto()
     ANY = auto()
 
-    def subtract(self, edge_type: EdgeType) -> Optional[EdgeType]:
+    def subtract(self, edge_type: EdgeType) -> EdgeType:
         if self == EdgeCount.ZERO:
             return EdgeType.CROSS
         elif self == EdgeCount.TWO:
             return EdgeType.THICK
-        return _SUBTRACT_TABLE[self.name].get(edge_type, None)
+        elif self == EdgeCount.ANY:
+            return EdgeType.SPACE
+        return _SUBTRACT_TABLE[self.name].get(edge_type, EdgeType.SPACE)
 
     def subtract_by(self, num: int) -> Optional["EdgeCount"]:
         if num not in (1, 2, 3):
             raise ValueError(f"SubtractBy only supports 1, 2, or 3, not {num}")
         name = _SUBTRACT_BY_TABLE[num][self.name]
-        return EdgeCount[name] if name else None
+        return EdgeCount[name]
 
     def intersect(self, other: "EdgeCount") -> Optional["EdgeCount"]:
         set_self = self.to_set()

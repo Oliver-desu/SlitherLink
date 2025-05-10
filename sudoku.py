@@ -139,30 +139,45 @@ class Sudoku:
 
     def set_edge(self, pos: Position, edge_type: EdgeType) -> bool:
         """
-        尝试设置 pos 位置处的边类型（edge type）。
-        - 如果当前位置是 SPACE（可修改），则更新为指定的 edge_type，返回 True。
-        - 如果当前位置不是 SPACE（不可修改），不进行更改，返回 False。
+        尝试设置 pos 位置的边类型（edge type）。
+        - 如果当前位置是 SPACE（可修改），则更新为指定的 edge_type，返回 True，并将相关操作添加到命令栈。
+        - 如果当前位置不是 SPACE（不可修改），则不进行更改，返回 False。
         """
-        if self.edge.get(pos, -1) == EdgeType.SPACE:
+        if self.edge.get(pos, -1) == EdgeType.SPACE and edge_type != EdgeType.SPACE:
             self.edge[pos] = edge_type
+
+            # 添加命令到堆栈：逐方向处理邻居
+            for direction in Direction.orthogonals():
+                neighbour_pos = pos.move(direction)
+                if neighbour_pos.kind() == Kind.VERTEX:
+                    self.add_command(self.deduce_from_vertex, neighbour_pos)
+                elif neighbour_pos.kind() == Kind.ENTRY:
+                    self.add_command(self.deduce_from_entry, neighbour_pos)
+                    prev_direction = direction.rotate(3)
+                    next_direction = direction.rotate(-3)
+                    # 对角线推导
+                    self.add_command(self.deduce_from_corner, neighbour_pos, prev_direction)
+                    self.add_command(self.deduce_from_corner, neighbour_pos, next_direction)
             return True
         return False
 
     def set_edge_count(self, pos: Position, direction: Direction, ec: EdgeCount) -> bool:
         """
-        尝试设置 pos 位置在指定方向 direction 上的边计数（edge count）。
-        - 如果当前位置已有 edge count，且与新 ec 不同，则取交集并更新。
+        尝试设置 pos 位置在指定方向上的边计数（edge count）。
+        - 如果已有值与新 ec 不同，则取交集更新并返回 True，同时将相关操作添加到命令栈。
         - 如果交集为空，说明矛盾，抛出 ValueError。
-        - 如果已有值与新值相同，不做更改，返回 False。
+        - 如果已有值与新值相同，则不做更改，返回 False。
         """
         curr_ec = self.edge_count.get((pos, direction))
-        if curr_ec and curr_ec != ec:
+        if curr_ec:
             new_ec = curr_ec.intersect(ec)
-            if new_ec:
-                self.edge_count[(pos, direction)] = new_ec
-                return True
-            else:
+            if not new_ec:
                 raise ValueError("Sudoku reached a contradiction!")
+            if curr_ec != new_ec:
+                self.edge_count[(pos, direction)] = new_ec
+                self.add_command(self.propagate_diagonal, pos, direction.opposite())
+                self.add_command(self.deduce_from_corner, pos, direction)
+                return True
         return False
 
     def add_command(self, func: Callable[..., None], *args: Any):
@@ -264,7 +279,6 @@ class Sudoku:
         - 读取当前格子反方向的 edge count（作为初值）。
         - 根据当前 entry 数字，推算出本方向的 edge count。
         - 更新本方向的 edge count，并将变化传递到对角方向的下一个格子。
-        - 如果推导成功，继续递归传播。
         """
         # 根据 entry 数字推导前方向的 edge count
         entry_num = self.entry.get(pos, -1)
@@ -274,13 +288,10 @@ class Sudoku:
         # 获取当前位置反方向的 edge count
         ec0 = self.edge_count.get((pos, direction.opposite()))
         ec1 = ec0.subtract_by(entry_num)
-
-        if self.set_edge_count(pos, direction, ec1):
-            # 如果成功修改，递归推导下一个位置
-            next_pos = pos.move(direction, 2)
-            ec2 = ec1.flip()
-            if self.set_edge_count(next_pos, direction.opposite(), ec2):
-                self.propagate_diagonal(next_pos, direction)
+        self.set_edge_count(pos, direction, ec1)
+        next_pos = pos.move(direction, 2)
+        ec2 = ec1.flip()
+        self.set_edge_count(next_pos, direction.opposite(), ec2)
 
     def solve(self):
         """
