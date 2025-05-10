@@ -1,11 +1,48 @@
 from enum import Enum, auto
 from typing import Optional
 
+# --- 外部缓存表 ---
+_EDGE_TO_STR_CACHE = {}
+
 
 class EdgeType(Enum):
     THICK = auto()
     SPACE = auto()
     CROSS = auto()
+
+    def to_str(self, scale: int, loc: int = -1) -> str:
+        # 查缓存
+        key = (self, scale, loc)
+        if key in _EDGE_TO_STR_CACHE:
+            return _EDGE_TO_STR_CACHE[key]
+
+        # 需要计算
+        if loc == -1:
+            length = 2 * scale + 1
+            if self == EdgeType.THICK:
+                result = '-' * length
+            elif self == EdgeType.SPACE:
+                result = ' ' * length
+            elif self == EdgeType.CROSS:
+                result = ' ' * scale + 'x' + ' ' * scale
+            else:
+                result = ''
+        else:
+            if self == EdgeType.THICK:
+                result = '|'
+            elif self == EdgeType.SPACE:
+                result = ' '
+            elif self == EdgeType.CROSS:
+                if scale == loc:
+                    result = 'x'
+                else:
+                    result = ' '
+            else:
+                result = ''
+
+        # 存缓存
+        _EDGE_TO_STR_CACHE[key] = result
+        return result
 
 
 # --- 静态表格 ---
