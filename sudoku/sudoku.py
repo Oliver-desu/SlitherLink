@@ -386,7 +386,7 @@ class Sudoku:
 
 
 if __name__ == "__main__":
-    sudoku = Sudoku.from_file("example_puzzle.txt")
+    sudoku = Sudoku.from_file("sudoku/example_puzzle.txt")
     sudoku.solve()
     sudoku.display((4, 1))
     try:
