@@ -3,12 +3,30 @@ from typing import Optional
 
 # --- 外部缓存表 ---
 _EDGE_TO_STR_CACHE = {}
+_EDGE_TYPE_ADD_TABLE = {
+    ("CROSS", "CROSS"): "ZERO",
+    ("CROSS", "THICK"): "ONE",
+    ("THICK", "CROSS"): "ONE",
+    ("THICK", "THICK"): "TWO",
+    ("SPACE", "SPACE"): "ANY",
+    ("SPACE", "THICK"): "LARGE",
+    ("THICK", "SPACE"): "LARGE",
+    ("SPACE", "CROSS"): "SMALL",
+    ("CROSS", "SPACE"): "SMALL",
+}
 
 
 class EdgeType(Enum):
     THICK = auto()
     SPACE = auto()
     CROSS = auto()
+
+    def add(self, other: EdgeType) -> EdgeCount:
+        """
+        返回两个 EdgeType 叠加后的 EdgeCount。
+        """
+        name = _EDGE_TYPE_ADD_TABLE[self.name, other.name]
+        return EdgeCount[name]
 
     def to_str(self, scale: int, loc: int = -1) -> str:
         # 查缓存
@@ -126,26 +144,26 @@ class EdgeCount(Enum):
     LARGE = auto()
     ANY = auto()
 
-    def subtract(self, edge_type: 'EdgeType') -> Optional['EdgeType']:
+    def subtract(self, edge_type: EdgeType) -> Optional[EdgeType]:
         if self == EdgeCount.ZERO:
             return EdgeType.CROSS
         elif self == EdgeCount.TWO:
             return EdgeType.THICK
         return _SUBTRACT_TABLE[self.name].get(edge_type, None)
 
-    def subtract_by(self, num: int) -> Optional["EdgeCount"]:
+    def subtract_by(self, num: int) -> Optional[EdgeCount]:
         if num not in (1, 2, 3):
             raise ValueError(f"SubtractBy only supports 1, 2, or 3, not {num}")
         name = _SUBTRACT_BY_TABLE[num][self.name]
         return EdgeCount[name] if name else None
 
-    def intersect(self, other: "EdgeCount") -> Optional["EdgeCount"]:
+    def intersect(self, other: EdgeCount) -> Optional[EdgeCount]:
         set_self = self.to_set()
         set_other = other.to_set()
         intersection = set_self & set_other
         return EdgeCount._from_set(intersection)
 
-    def flip(self) -> "EdgeCount":
+    def flip(self) -> EdgeCount:
         if self == EdgeCount.ZERO:
             return EdgeCount.EVEN
         if self == EdgeCount.SMALL:
@@ -156,7 +174,7 @@ class EdgeCount(Enum):
         return _EC_TO_SET[self.name]
 
     @staticmethod
-    def _from_set(values: set) -> Optional["EdgeCount"]:
+    def _from_set(values: set) -> Optional[EdgeCount]:
         name = _SET_TO_EC.get(frozenset(values))
         return EdgeCount[name] if name else None
 
