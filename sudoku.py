@@ -1,12 +1,16 @@
-from typing import List, Dict
+from typing import Callable, List, Dict, Any
 
 from edge_count import *
 from pos import *
+
+Command = Tuple[Callable[..., None], Tuple[Any, ...]]
 
 
 class Sudoku:
     """
     表示一个带边界信息的数独棋盘。
+
+    属性:
     - size: Tuple[int, int]
         数独棋盘的格子尺寸，(行数, 列数)。
     - total_size: Tuple[int, int]
@@ -19,6 +23,18 @@ class Sudoku:
     - edge_count: Dict[Tuple[Position, Direction], EdgeCount]
         记录每个格子的四个角的边界条件，
         key 是 (格子中心位置, 角的方向)，value 是 EdgeCount，表示该角可能有多少条实线边。
+    - command_stack: List[Command]
+        维护一系列等待执行的推导命令，支持批量逻辑推导。
+
+    方法:
+    - set_edge(pos, edge_type): 尝试设置一条边，若成功修改返回 True。
+    - set_edge_count(pos, direction, ec): 尝试设置一组边数限制，若成功修改返回 True。
+    - deduce_from_corner(pos, direction): 基于角的边信息进行推导。
+    - deduce_from_vertex(pos): 基于顶点的边信息进行推导。
+    - deduce_from_entry(pos): 基于格子内部数字进行推导。
+    - add_command(func, *args): 将推导命令加入栈中。
+    - run_next_command(): 执行栈顶命令。
+    - run_all_commands(): 执行所有命令直到栈空。
     """
 
     def __init__(self, grid: List[List[int]]):
@@ -33,6 +49,7 @@ class Sudoku:
         self.entry: Dict[Position, int] = {}
         self.edge: Dict[Position, EdgeType] = {}
         self.edge_count: Dict[Tuple[Position, Direction], EdgeCount] = {}
+        self.command_stack: List[Command] = []
 
         # 读取数独格子
         for i in range(h):
@@ -148,18 +165,42 @@ class Sudoku:
                 raise ValueError("Sudoku reached a contradiction!")
         return False
 
+    def add_command(self, func: Callable[..., None], *args: Any):
+        """
+        将一个新的推导命令加入栈中。
+        """
+        self.command_stack.append((func, args))
+
+    def run_next_command(self):
+        """
+        执行栈顶的推导命令。
+        """
+        if not self.command_stack:
+            return
+        func, args = self.command_stack.pop()
+        func(*args)
+
+    def run_all_commands(self):
+        """
+        执行所有推导命令，直到栈空。
+        """
+        while self.command_stack:
+            self.run_next_command()
+
     def deduce_from_corner(self, pos: Position, direction: Direction) -> None:
         """
         根据一个 corner 点和方向，结合已有边的信息，推导 edge 和 edge_count 的新状态。
         """
+        # 获取当前 corner 的 edge count 信息
+        ec = self.edge_count.get((pos, direction))
+        if not ec:
+            return
+
         # 获取当前方向左右两条边
         pos1 = pos.move(direction.rotate(step=-1))  # 左边
         pos2 = pos.move(direction.rotate(step=1))  # 右边
         edge1 = self.edge.get(pos1)
         edge2 = self.edge.get(pos2)
-
-        # 获取当前 corner 的 edge count 信息
-        ec = self.edge_count.get((pos, direction))
 
         # 计算推导结果
         new_ec = edge1.add(edge2)
@@ -170,6 +211,52 @@ class Sudoku:
         self.set_edge_count(pos, direction, new_ec)
         self.set_edge(pos1, new_edge1)
         self.set_edge(pos2, new_edge2)
+
+    def deduce_from_vertex(self, pos: Position) -> None:
+        """
+        根据顶点 (vertex) 周围的边状态进行逻辑推导。
+        """
+        dct = {EdgeType.CROSS: [], EdgeType.SPACE: [], EdgeType.THICK: []}
+        for edge_pos in pos.neighbors():
+            edge = self.edge.get(edge_pos)
+            if edge:
+                dct[edge].append(edge_pos)
+
+        if len(dct[EdgeType.THICK]) == 2:
+            # 如果已有两条实线，则剩余空边必须为叉
+            for edge_pos in dct[EdgeType.SPACE]:
+                self.set_edge(edge_pos, EdgeType.CROSS)
+        elif len(dct[EdgeType.THICK]) == 1 and len(dct[EdgeType.SPACE]) == 1:
+            # 如果已有一条实线且一条空边，则空边必须为实线
+            for edge_pos in dct[EdgeType.SPACE]:
+                self.set_edge(edge_pos, EdgeType.THICK)
+        elif len(dct[EdgeType.THICK]) == 0 and len(dct[EdgeType.SPACE]) == 1:
+            # 如果无实线且一条空边，则空边必须为叉
+            for edge_pos in dct[EdgeType.SPACE]:
+                self.set_edge(edge_pos, EdgeType.CROSS)
+
+    def deduce_from_entry(self, pos: Position) -> None:
+        """
+        根据格子 (entry) 中的数字进行逻辑推导。
+        """
+        entry_num = self.entry.get(pos)
+        if entry_num is None:
+            return
+
+        dct = {EdgeType.CROSS: [], EdgeType.SPACE: [], EdgeType.THICK: []}
+        for edge_pos in pos.neighbors():
+            edge = self.edge.get(edge_pos)
+            if edge:
+                dct[edge].append(edge_pos)
+
+        if len(dct[EdgeType.THICK]) == entry_num:
+            # 如果已有的实线数等于 entry 数字，剩余空边必须为叉
+            for edge_pos in dct[EdgeType.SPACE]:
+                self.set_edge(edge_pos, EdgeType.CROSS)
+        elif len(dct[EdgeType.THICK]) + len(dct[EdgeType.SPACE]) == entry_num:
+            # 如果已有实线数 + 空边数等于 entry 数字，空边必须为实线
+            for edge_pos in dct[EdgeType.SPACE]:
+                self.set_edge(edge_pos, EdgeType.THICK)
 
 
 if __name__ == "__main__":
