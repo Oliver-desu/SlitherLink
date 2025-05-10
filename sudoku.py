@@ -37,6 +37,7 @@ class Sudoku:
     - deduce_from_3(pos): 针对相邻 3 的特殊推导。
     - deduce_from_connected(set1): 处理通过连接关系推导出新的 CROSS 边以避免 Loop。
     - solve(): 扫描初始盘面，根据 0、3 的 Entry 信息建立初步推导指令并执行。
+    - validate_solution(): 验证当前解答是否正确，包括检查连通性和格子内部数字要求。
     - add_command(func, *args): 将推导命令加入栈中。
     - run_next_command(): 执行栈顶命令。
     - run_all_commands(): 执行所有命令直到栈空。
@@ -178,17 +179,16 @@ class Sudoku:
         - 如果交集为空，说明矛盾，抛出 ValueError。
         - 如果已有值与新值相同，则不做更改，返回 False。
         """
-        curr_ec = self.edge_count.get((pos, direction))
-        if curr_ec:
-            new_ec = curr_ec.intersect(ec)
-            if not new_ec:
-                self.display()
-                raise ValueError(f"Sudoku reached a contradiction at entry {pos}!")
-            if curr_ec != new_ec:
-                self.edge_count[(pos, direction)] = new_ec
-                self.add_command(self.propagate_diagonal, pos, direction.opposite())
-                self.add_command(self.deduce_from_corner, pos, direction)
-                return True
+        curr_ec = self.edge_count.get((pos, direction), EdgeCount.ANY)
+        new_ec = curr_ec.intersect(ec)
+        if not new_ec:
+            self.display()
+            raise ValueError(f"检测到数独在位置 {pos} 处存在矛盾，推导无法继续。")
+        if curr_ec != new_ec:
+            self.edge_count[(pos, direction)] = new_ec
+            self.add_command(self.propagate_diagonal, pos, direction.opposite())
+            self.add_command(self.deduce_from_corner, pos, direction)
+            return True
         return False
 
     def add_command(self, func: Callable[..., None], *args: Any):
@@ -348,7 +348,8 @@ class Sudoku:
         pos1, pos2 = tuple(set1)
         for edge_pos in pos1.common_neighbors(pos2):
             if self.edge.get(edge_pos) == EdgeType.SPACE:
-                self.set_edge(edge_pos, EdgeType.CROSS)
+                if len(self.connected) > 1:
+                    self.set_edge(edge_pos, EdgeType.CROSS)
 
     def solve(self):
         """
@@ -368,8 +369,28 @@ class Sudoku:
 
         self.run_all_commands()
 
+    def validate_solution(self) -> None:
+        """
+        验证棋盘是否正确。如果不正确，抛出 ValueError。
+        """
+        if len(self.connected) != 2 or self.connected[0] != self.connected[1]:
+            raise ValueError("未形成完整闭环")
+
+        for pos, num in self.entry.items():
+            count = sum(
+                1 for edge_pos in pos.neighbors()
+                if self.edge.get(edge_pos) == EdgeType.THICK
+            )
+            if count != num:
+                raise ValueError(f"位置 {pos} 的边数量 {count} 与期望 {num} 不符")
+
 
 if __name__ == "__main__":
     sudoku = Sudoku.from_file("example_puzzle.txt")
     sudoku.solve()
     sudoku.display((4, 1))
+    try:
+        sudoku.validate_solution()
+        print("正确解答！")
+    except ValueError as e:
+        print("解答错误：", e)
