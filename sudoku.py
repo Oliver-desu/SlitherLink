@@ -120,6 +120,57 @@ class Sudoku:
                 return str(x) + (2 * row_scale - 1) * ' ' + str(y)
         return (2 * row_scale + 1) * ' '
 
+    def set_edge(self, pos: Position, edge_type: EdgeType) -> bool:
+        """
+        尝试设置 pos 位置处的边类型（edge type）。
+        - 如果当前位置是 SPACE（可修改），则更新为指定的 edge_type，返回 True。
+        - 如果当前位置不是 SPACE（不可修改），不进行更改，返回 False。
+        """
+        if self.edge.get(pos, -1) == EdgeType.SPACE:
+            self.edge[pos] = edge_type
+            return True
+        return False
+
+    def set_edge_count(self, pos: Position, direction: Direction, ec: EdgeCount) -> bool:
+        """
+        尝试设置 pos 位置在指定方向 direction 上的边计数（edge count）。
+        - 如果当前位置已有 edge count，且与新 ec 不同，则取交集并更新。
+        - 如果交集为空，说明矛盾，抛出 ValueError。
+        - 如果已有值与新值相同，不做更改，返回 False。
+        """
+        curr_ec = self.edge_count.get((pos, direction))
+        if curr_ec and curr_ec != ec:
+            new_ec = curr_ec.intersect(ec)
+            if new_ec:
+                self.edge_count[(pos, direction)] = new_ec
+                return True
+            else:
+                raise ValueError("Sudoku reached a contradiction!")
+        return False
+
+    def deduce_from_corner(self, pos: Position, direction: Direction) -> None:
+        """
+        根据一个 corner 点和方向，结合已有边的信息，推导 edge 和 edge_count 的新状态。
+        """
+        # 获取当前方向左右两条边
+        pos1 = pos.move(direction.rotate(step=-1))  # 左边
+        pos2 = pos.move(direction.rotate(step=1))  # 右边
+        edge1 = self.edge.get(pos1)
+        edge2 = self.edge.get(pos2)
+
+        # 获取当前 corner 的 edge count 信息
+        ec = self.edge_count.get((pos, direction))
+
+        # 计算推导结果
+        new_ec = edge1.add(edge2)
+        new_edge1 = ec.subtract(edge2)
+        new_edge2 = ec.subtract(edge1)
+
+        # 应用推导结果，更新棋盘状态
+        self.set_edge_count(pos, direction, new_ec)
+        self.set_edge(pos1, new_edge1)
+        self.set_edge(pos2, new_edge2)
+
 
 if __name__ == "__main__":
     sudoku = Sudoku.from_file("example_puzzle.txt")
