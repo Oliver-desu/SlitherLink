@@ -2,13 +2,26 @@
 
 本项目用于通过图像识别（OCR）把 SlitherLink 数独题目编成矩阵，并计算解答。
 
-项目分为两大部分：
+## 数独解法简介（详情见 `solver.md`）
 
-- `ocr/ocr_script.py`：负责通过模板匹配和 OCR 识别数字，生成整个数独矩阵
-- `sudoku/sudoku_solver.py`：负责读取 txt 文件，求解数独，并验证解答
+本项目中的 SlitherLink 数独求解器，完全基于 **Edge Count** 和连通性 **Connected** 的推理机制。
+
+**特点：**
+
+- **不使用回溯（Backtracking）**，仅依靠逻辑推导进行解题
+- **不保证完整性**，在极少数复杂局面下可能无法解出
+- **足够应对大多数中小规模的数独**
+
+如果你对解法的细节和推导过程感兴趣，请参考 [solver.md](solver.md) 文件，里面有更详细的算法分析和实现过程。
 
 ## 目录结构
 
+项目分为两大部分：
+
+- `ocr/ocr_script.py`：负责通过模板匹配和 OCR 识别数字，生成整个数独矩阵
+- `sudoku/sudoku.py`：负责读取 txt 文件，求解数独，并验证解答
+
+```
 project_root/
 │
 ├── sudoku/                # 数独相关功能
@@ -25,6 +38,7 @@ project_root/
 ├── main.py                # 主程序入口
 ├── requirements.txt       # 依赖列表
 └── README.md              # 项目说明文档
+```
 
 ## 使用方法
 
